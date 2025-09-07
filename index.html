@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rainbow Light Metaballs</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="controls">
+        <div class="control-group">
+            <label>Resolution</label>
+            <input type="range" id="resolution" min="3" max="15" value="8">
+            <span class="value" id="resValue">8</span>
+        </div>
+        <div class="control-group">
+            <label>Threshold</label>
+            <input type="range" id="threshold" min="50" max="200" value="100">
+            <span class="value" id="thresholdValue">100</span>
+        </div>
+        <div class="control-group">
+            <label>Speed</label>
+            <input type="range" id="speed" min="10" max="200" value="50">
+            <span class="value" id="speedValue">50</span>
+        </div>
+        <div class="control-group">
+            <label>Glow Intensity</label>
+            <input type="range" id="glow" min="50" max="150" value="100">
+            <span class="value" id="glowValue">100</span>
+        </div>
+        <button class="toggle-btn" id="toggleMode">Toggle Mode</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
