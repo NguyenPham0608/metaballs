@@ -8,7 +8,7 @@ canvas.height = height;
 
 // Configuration
 let config = {
-    resolution: 8,
+    resolution: 15,
     threshold: 70,
     speed: 25,
     glow: 100,
