@@ -26,43 +26,153 @@ const metaballs = [
         color: { r: 0, g: 255, b: 255 }, // Cyan
         angle: 0,
         orbitRadius: 150,
-        orbitSpeed: 0.02
+        orbitSpeed: 0.02,
+        isDragging: false,
+        originalX: width * 0.5,
+        originalY: height * 0.5
     },
     {
-        x: width * 0.5,
-        y: height * 0.5,
+        x: width * 0.5 + 100,
+        y: height * 0.5 - 50,
         vx: 0,
         vy: 0,
         radius: 100,
         color: { r: 255, g: 0, b: 255 }, // Magenta
         angle: Math.PI * 2 / 3,
         orbitRadius: 200,
-        orbitSpeed: 0.015
+        orbitSpeed: 0.015,
+        isDragging: false,
+        originalX: width * 0.5,
+        originalY: height * 0.5
     },
     {
-        x: width * 0.5,
-        y: height * 0.5,
+        x: width * 0.5 - 80,
+        y: height * 0.5 + 80,
         vx: 0,
         vy: 0,
         radius: 90,
         color: { r: 255, g: 255, b: 0 }, // Yellow
         angle: Math.PI * 4 / 3,
         orbitRadius: 120,
-        orbitSpeed: 0.025
+        orbitSpeed: 0.025,
+        isDragging: false,
+        originalX: width * 0.5,
+        originalY: height * 0.5
     }
 ];
 
 // Mouse interaction
-let mouse = { x: width / 2, y: height / 2, active: false };
+let mouse = {
+    x: width / 2,
+    y: height / 2,
+    active: false,
+    isDragging: false,
+    draggedBall: null,
+    offset: { x: 0, y: 0 }
+};
+
+// Helper function to check if mouse is over a metaball
+function getMetaballUnderMouse(mouseX, mouseY) {
+    for (let i = metaballs.length - 1; i >= 0; i--) {
+        const ball = metaballs[i];
+        const dist = Math.hypot(mouseX - ball.x, mouseY - ball.y);
+        if (dist <= ball.radius) {
+            return ball;
+        }
+    }
+    return null;
+}
+
+// Mouse event handlers
+canvas.addEventListener('mousedown', (e) => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+    mouse.active = true;
+
+    const ball = getMetaballUnderMouse(mouse.x, mouse.y);
+    if (ball) {
+        mouse.isDragging = true;
+        mouse.draggedBall = ball;
+        mouse.offset.x = mouse.x - ball.x;
+        mouse.offset.y = mouse.y - ball.y;
+        ball.isDragging = true;
+        canvas.style.cursor = 'grabbing';
+    }
+});
 
 canvas.addEventListener('mousemove', (e) => {
     mouse.x = e.clientX;
     mouse.y = e.clientY;
     mouse.active = true;
+
+    if (mouse.isDragging && mouse.draggedBall) {
+        // Update dragged ball position
+        mouse.draggedBall.x = mouse.x - mouse.offset.x;
+        mouse.draggedBall.y = mouse.y - mouse.offset.y;
+    } else {
+        // Update cursor based on hover state
+        const ball = getMetaballUnderMouse(mouse.x, mouse.y);
+        canvas.style.cursor = ball ? 'grab' : 'default';
+    }
+});
+
+canvas.addEventListener('mouseup', () => {
+    if (mouse.draggedBall) {
+        mouse.draggedBall.isDragging = false;
+        mouse.draggedBall = null;
+    }
+    mouse.isDragging = false;
+    canvas.style.cursor = 'default';
 });
 
 canvas.addEventListener('mouseleave', () => {
     mouse.active = false;
+    if (mouse.draggedBall) {
+        mouse.draggedBall.isDragging = false;
+        mouse.draggedBall = null;
+    }
+    mouse.isDragging = false;
+    canvas.style.cursor = 'default';
+});
+
+// Touch events for mobile support
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = touch.clientX - rect.left;
+    mouse.y = touch.clientY - rect.top;
+
+    const ball = getMetaballUnderMouse(mouse.x, mouse.y);
+    if (ball) {
+        mouse.isDragging = true;
+        mouse.draggedBall = ball;
+        mouse.offset.x = mouse.x - ball.x;
+        mouse.offset.y = mouse.y - ball.y;
+        ball.isDragging = true;
+    }
+});
+
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = touch.clientX - rect.left;
+    mouse.y = touch.clientY - rect.top;
+
+    if (mouse.isDragging && mouse.draggedBall) {
+        mouse.draggedBall.x = mouse.x - mouse.offset.x;
+        mouse.draggedBall.y = mouse.y - mouse.offset.y;
+    }
+});
+
+canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    if (mouse.draggedBall) {
+        mouse.draggedBall.isDragging = false;
+        mouse.draggedBall = null;
+    }
+    mouse.isDragging = false;
 });
 
 // Controls
@@ -88,6 +198,8 @@ document.getElementById('glow').addEventListener('input', (e) => {
 
 document.getElementById('toggleMode').addEventListener('click', () => {
     config.renderMode = config.renderMode === 'dots' ? 'smooth' : 'dots';
+    document.getElementById('toggleMode').textContent =
+        config.renderMode === 'dots' ? 'Switch to Smooth' : 'Switch to Dots';
 });
 
 // Resize handler
@@ -103,25 +215,27 @@ function animate() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
     ctx.fillRect(0, 0, width, height);
 
-    // Update metaball positions
+    // Update metaball positions (only for non-dragged balls)
     const centerX = width / 2;
     const centerY = height / 2;
     const speedFactor = config.speed / 50;
 
     metaballs.forEach((ball, i) => {
-        ball.angle += ball.orbitSpeed * speedFactor;
+        if (!ball.isDragging) {
+            ball.angle += ball.orbitSpeed * speedFactor;
 
-        // Orbital motion
-        let targetX = centerX + Math.cos(ball.angle) * ball.orbitRadius;
-        let targetY = centerY + Math.sin(ball.angle) * ball.orbitRadius;
+            // Orbital motion
+            let targetX = centerX + Math.cos(ball.angle) * ball.orbitRadius;
+            let targetY = centerY + Math.sin(ball.angle) * ball.orbitRadius;
 
-        // Smooth movement
-        ball.x += (targetX - ball.x) * 0.1;
-        ball.y += (targetY - ball.y) * 0.1;
+            // Smooth movement
+            ball.x += (targetX - ball.x) * 0.1;
+            ball.y += (targetY - ball.y) * 0.1;
 
-        // Add some floating motion
-        ball.x += Math.sin(ball.angle * 2) * 2;
-        ball.y += Math.cos(ball.angle * 1.5) * 2;
+            // Add some floating motion
+            ball.x += Math.sin(ball.angle * 2) * 2;
+            ball.y += Math.cos(ball.angle * 1.5) * 2;
+        }
     });
 
     // Render metaballs
