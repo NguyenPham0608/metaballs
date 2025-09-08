@@ -443,7 +443,7 @@ class OptimizedMetaballs {
 
         for (let i = 0; i < this.metaballs.length; i++) {
             const ball = this.metaballs[i];
-            positions.push(ball.x * this.quality, ball.y * this.quality, 0);
+            positions.push(ball.x * this.quality, (this.height - ball.y) * this.quality, 0);
             colors.push(...ball.color);
             radii.push(ball.radius * this.quality);
         }
