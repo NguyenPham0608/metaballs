@@ -55,15 +55,6 @@ input[type="range"] {
     -webkit-appearance: none;
 }
 
-/* 
-input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 12px;
-    height: 12px;
-    background: linear-gradient(45deg, #00ffff, #ff00ff, #ffff00);
-    border-radius: 50%;
-    cursor: pointer;
-} */
 
 .value {
     display: inline-block;
