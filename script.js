@@ -75,7 +75,7 @@ class OptimizedMetaballs {
         this.config = {
             resolution: 10,
             threshold: 130,
-            speed: 25,
+            speed: 10,
             glow: 130
         };
 
