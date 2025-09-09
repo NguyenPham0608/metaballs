@@ -18,43 +18,42 @@ uniform float u_radii[3];
 uniform float u_threshold;
 uniform float u_glow;
 
+float fieldFalloff(float dist, float radius) {
+    float normalizedDist = dist / (radius * 3.0); // matches Canvas2D “3x radius” soft falloff
+    return pow(max(0.0, 1.0 - normalizedDist), 2.0);
+}
+
 void main() {
     vec2 uv = gl_FragCoord.xy;
-    
-    float totalInfluence = 0.0;
+    float totalField = 0.0;
     vec3 color = vec3(0.0);
-    
-    // Calculate influences
-    float influences[3];
+
     for(int i = 0; i < 3; i++) {
         vec2 ballPos = u_balls[i].xy;
         float radius = u_radii[i];
-        
         float dist = distance(uv, ballPos);
-        influences[i] = radius * radius / (dist * dist + 1.0);
-        totalInfluence += influences[i];
+
+        float field = fieldFalloff(dist, radius);
+        totalField += field;
+        color += u_colors[i] * field;
     }
-    
-    if(totalInfluence > u_threshold * 0.01) {
-        // Normalize influences to get blend weights
-        for(int i = 0; i < 3; i++) {
-            float weight = influences[i] / totalInfluence;
-            color += u_colors[i] * weight;
-        }
-        
-        // Apply intensity and glow
-        float intensity = smoothstep(u_threshold * 0.008, u_threshold * 0.015, totalInfluence);
-        intensity *= min(1.5, totalInfluence * u_glow * 0.002);
-        
-        // Add slight bloom effect at edges
-        float edge = 1.0 - smoothstep(u_threshold * 0.01, u_threshold * 0.02, totalInfluence);
-        color = mix(color, color * 1.5, edge * 0.3);
-        
-        gl_FragColor = vec4(color * intensity, intensity);
+
+    if(totalField > u_threshold * 0.003) {
+        // Normalize colors like Canvas2D
+        color /= totalField;
+
+        // Soft edge transition
+        float edge = smoothstep(0.0, u_threshold * 0.006, totalField);
+
+        // Intensity and glow factor
+        float intensity = edge * min(1.5, sqrt(totalField) * u_glow * 0.015);
+
+        gl_FragColor = vec4(color * intensity, min(0.95, intensity));
     } else {
-        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+        gl_FragColor = vec4(0.0);
     }
 }
+
 `;
 
 class OptimizedMetaballs {
@@ -75,9 +74,9 @@ class OptimizedMetaballs {
 
         this.config = {
             resolution: 10,
-            threshold: 70,
+            threshold: 130,
             speed: 25,
-            glow: 100
+            glow: 130
         };
 
         this.metaballs = [
