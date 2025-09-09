@@ -42,7 +42,7 @@ void main() {
         // Normalize colors like Canvas2D
         color /= totalField;
 
-        float edge = smoothstep(u_threshold * 0.002, u_threshold * 0.004, totalField);
+        float edge = smoothstep(u_threshold * 0.0025, u_threshold * 0.004, totalField);
 
 
         float intensity = edge * sqrt(totalField) * u_glow * 0.010;
@@ -74,7 +74,7 @@ class OptimizedMetaballs {
 
         this.config = {
             resolution: 10,
-            threshold: 130,
+            threshold: 200,
             speed: 10,
             glow: 130
         };
