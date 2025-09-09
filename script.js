@@ -341,9 +341,19 @@ class OptimizedMetaballs {
         }
     }
 
+    // Replace the handleMouseUp method with this updated version:
+
     handleMouseUp() {
         if (this.mouse.draggedBall) {
-            this.mouse.draggedBall.isDragging = false;
+            const ball = this.mouse.draggedBall;
+
+            // Calculate new orbit parameters based on dropped position
+            const dx = ball.x - this.centerX;
+            const dy = ball.y - this.centerY;
+            ball.orbitRadius = Math.sqrt(dx * dx + dy * dy);
+            ball.angle = Math.atan2(dy, dx);
+
+            ball.isDragging = false;
             this.mouse.draggedBall = null;
         }
         this.mouse.isDragging = false;
