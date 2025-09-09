@@ -86,14 +86,14 @@ class OptimizedMetaballs {
                 radius: 80,
                 color: [0, 1, 1], // Cyan
                 angle: 0,
-                orbitRadius: 150,
+                orbitRadius: 80,
                 orbitSpeed: 0.02,
                 isDragging: false
             },
             {
                 x: this.width * 0.5 + 100,
                 y: this.height * 0.5 - 50,
-                radius: 100,
+                radius: 60,
                 color: [1, 0, 1], // Magenta
                 angle: Math.PI * 2 / 3,
                 orbitRadius: 200,
@@ -103,7 +103,7 @@ class OptimizedMetaballs {
             {
                 x: this.width * 0.5 - 80,
                 y: this.height * 0.5 + 80,
-                radius: 90,
+                radius: 70,
                 color: [1, 1, 0], // Yellow
                 angle: Math.PI * 4 / 3,
                 orbitRadius: 120,
