@@ -1,54 +1,61 @@
 // WebGL vertex shader
 const vertexShaderSource = `
-            attribute vec2 a_position;
-            void main() {
-                gl_Position = vec4(a_position, 0.0, 1.0);
-            }
-        `;
+attribute vec2 a_position;
+void main() {
+    gl_Position = vec4(a_position, 0.0, 1.0);
+}
+`;
 
-// WebGL fragment shader for metaballs
+// FIXED WebGL fragment shader for proper color blending
 const fragmentShaderSource = `
-            precision highp float;
-            
-            uniform vec2 u_resolution;
-            uniform float u_time;
-            uniform vec3 u_balls[3];
-            uniform vec3 u_colors[3];
-            uniform float u_radii[3];
-            uniform float u_threshold;
-            uniform float u_glow;
-            
-            void main() {
-                vec2 uv = gl_FragCoord.xy;
-                
-                float influence = 0.0;
-                vec3 color = vec3(0.0);
-                
-                for(int i = 0; i < 3; i++) {
-                    vec2 ballPos = u_balls[i].xy;
-                    float radius = u_radii[i];
-                    
-                    float dist = distance(uv, ballPos);
-                    float inf = radius * radius / (dist * dist + 1.0);
-                    
-                    influence += inf;
-                    color += u_colors[i] * inf;
-                }
-                
-                if(influence > u_threshold * 0.01) {
-                    float intensity = min(1.0, influence * u_glow * 0.003);
-                    color = color / influence * intensity;
-                    
-                    // Add glow effect
-                    float edge = smoothstep(u_threshold * 0.008, u_threshold * 0.012, influence);
-                    color *= edge;
-                    
-                    gl_FragColor = vec4(color, intensity * edge);
-                } else {
-                    gl_FragColor = vec4(0.0, 0.0, 0.0, 0.1);
-                }
-            }
-        `;
+precision highp float;
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec3 u_balls[3];
+uniform vec3 u_colors[3];
+uniform float u_radii[3];
+uniform float u_threshold;
+uniform float u_glow;
+
+void main() {
+    vec2 uv = gl_FragCoord.xy;
+    
+    float totalInfluence = 0.0;
+    vec3 color = vec3(0.0);
+    
+    // Calculate influences
+    float influences[3];
+    for(int i = 0; i < 3; i++) {
+        vec2 ballPos = u_balls[i].xy;
+        float radius = u_radii[i];
+        
+        float dist = distance(uv, ballPos);
+        influences[i] = radius * radius / (dist * dist + 1.0);
+        totalInfluence += influences[i];
+    }
+    
+    if(totalInfluence > u_threshold * 0.01) {
+        // Normalize influences to get blend weights
+        for(int i = 0; i < 3; i++) {
+            float weight = influences[i] / totalInfluence;
+            color += u_colors[i] * weight;
+        }
+        
+        // Apply intensity and glow
+        float intensity = smoothstep(u_threshold * 0.008, u_threshold * 0.015, totalInfluence);
+        intensity *= min(1.5, totalInfluence * u_glow * 0.002);
+        
+        // Add slight bloom effect at edges
+        float edge = 1.0 - smoothstep(u_threshold * 0.01, u_threshold * 0.02, totalInfluence);
+        color = mix(color, color * 1.5, edge * 0.3);
+        
+        gl_FragColor = vec4(color * intensity, intensity);
+    } else {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+    }
+}
+`;
 
 class OptimizedMetaballs {
     constructor() {
@@ -456,6 +463,7 @@ class OptimizedMetaballs {
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 
+    // FIXED Canvas2D rendering with proper color blending
     renderCanvas2D() {
         const ctx = this.ctx;
         if (!ctx) return;
@@ -463,8 +471,8 @@ class OptimizedMetaballs {
         const width = this.canvas2d.width;
         const height = this.canvas2d.height;
         const step = Math.max(1, this.config.resolution);
-        const threshold = this.config.threshold * 0.01;
-        const glowFactor = this.config.glow * 0.003;
+        const threshold = this.config.threshold * 0.003;
+        const glowFactor = this.config.glow * 0.015;
 
         // Clear with fade effect
         ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
@@ -474,52 +482,61 @@ class OptimizedMetaballs {
         const balls = this.metaballs.map(ball => ({
             x: ball.x * this.quality,
             y: ball.y * this.quality,
-            r2: (ball.radius * this.quality) * (ball.radius * this.quality),
-            r: ball.color[0] * 255,
-            g: ball.color[1] * 255,
-            b: ball.color[2] * 255
+            radius: ball.radius * this.quality,
+            r: ball.color[0],
+            g: ball.color[1],
+            b: ball.color[2]
         }));
 
-        // Render using optimized loops
+        // Render using field-based color blending
         for (let y = 0; y < height; y += step) {
             for (let x = 0; x < width; x += step) {
-                let influence = 0;
+                let totalField = 0;
                 let r = 0, g = 0, b = 0;
 
-                // Unrolled loop for 3 metaballs
-                let dx = x - balls[0].x;
-                let dy = y - balls[0].y;
-                let inf = balls[0].r2 / (dx * dx + dy * dy + 1);
-                influence += inf;
-                r += balls[0].r * inf;
-                g += balls[0].g * inf;
-                b += balls[0].b * inf;
+                // Calculate field strength with much slower falloff
+                for (let i = 0; i < balls.length; i++) {
+                    const dx = x - balls[i].x;
+                    const dy = y - balls[i].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
 
-                dx = x - balls[1].x;
-                dy = y - balls[1].y;
-                inf = balls[1].r2 / (dx * dx + dy * dy + 1);
-                influence += inf;
-                r += balls[1].r * inf;
-                g += balls[1].g * inf;
-                b += balls[1].b * inf;
+                    // Much slower falloff - extends 3x the radius
+                    const normalizedDist = dist / (balls[i].radius * 3);
+                    const field = Math.max(0, 1 - normalizedDist) ** 2;
 
-                dx = x - balls[2].x;
-                dy = y - balls[2].y;
-                inf = balls[2].r2 / (dx * dx + dy * dy + 1);
-                influence += inf;
-                r += balls[2].r * inf;
-                g += balls[2].g * inf;
-                b += balls[2].b * inf;
+                    // Accumulate color weighted by field
+                    r += balls[i].r * field;
+                    g += balls[i].g * field;
+                    b += balls[i].b * field;
+                    totalField += field;
+                }
 
-                if (influence > threshold) {
-                    const intensity = Math.min(1, influence * glowFactor);
-                    const invInfluence = 1 / influence;
+                // Check if field exceeds threshold
+                if (totalField > threshold) {
+                    // Normalize colors by total field
+                    if (totalField > 0.001) {
+                        r /= totalField;
+                        g /= totalField;
+                        b /= totalField;
+                    }
 
-                    ctx.fillStyle = `rgba(${(r * invInfluence * intensity) | 0}, ${(g * invInfluence * intensity) | 0}, ${(b * invInfluence * intensity) | 0}, ${intensity})`;
+                    // Very soft edge transition for smooth blending
+                    const edge = this.smoothstep(0, threshold * 2, totalField);
+
+                    // Calculate intensity
+                    const intensity = edge * Math.min(1.5, Math.sqrt(totalField) * glowFactor);
+
+                    ctx.fillStyle = `rgba(${(r * 255 * intensity) | 0}, ${(g * 255 * intensity) | 0}, ${(b * 255 * intensity) | 0}, ${Math.min(0.95, intensity)})`;
                     ctx.fillRect(x, y, step, step);
                 }
             }
         }
+    }
+
+    // Helper function for smooth transitions
+    smoothstep(edge0, edge1, x) {
+        const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+        return t * t * (3 - 2 * t);
     }
 
     updateFPS(currentTime) {
