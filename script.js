@@ -26,35 +26,41 @@ float fieldFalloff(float dist, float radius) {
 void main() {
     vec2 uv = gl_FragCoord.xy;
     float totalField = 0.0;
-    vec3 color = vec3(0.0);
+    vec3 weightedColor = vec3(0.0);
 
-    for(int i = 0; i < 3; i++) {
+    // Accumulate weighted colors
+    for (int i = 0; i < 3; i++) {
         vec2 ballPos = u_balls[i].xy;
         float radius = u_radii[i];
         float dist = distance(uv, ballPos);
 
         float field = fieldFalloff(dist, radius);
         totalField += field;
-        color += u_colors[i] * field;
+        weightedColor += u_colors[i] * field;
     }
 
-    if(totalField > u_threshold * 0.003) {
-        // Normalize colors like Canvas2D
-        color /= totalField;
+    if (totalField > u_threshold * 0.003) {
+        vec3 mixedColor = weightedColor / totalField; // hue preserved
 
-        float edge = smoothstep(u_threshold * 0.0025, u_threshold * 0.004, totalField);
+        // Core & halo masks
+        float core = smoothstep(u_threshold * 0.003, u_threshold * 0.005, totalField);
+        float halo = smoothstep(u_threshold * 0.0005, u_threshold * 0.04, totalField);
 
+        // Brightness only affects alpha, not RGB directly
+        float brightness = pow(totalField, 0.4);
 
-        float intensity = edge * sqrt(totalField) * u_glow * 0.010;
+        float alpha = (core * u_glow * 0.03 * brightness) +
+                    (halo * 0.3 * brightness);
 
+        // ✅ Color stays normalized, only alpha drives strength
+        gl_FragColor = vec4(mixedColor, min(0.95, alpha));
 
-        gl_FragColor = vec4(color * intensity, min(0.95, intensity));
     } else {
         gl_FragColor = vec4(0.0);
     }
 }
-
 `;
+
 
 class OptimizedMetaballs {
     constructor() {
@@ -93,7 +99,7 @@ class OptimizedMetaballs {
             {
                 x: this.width * 0.5 + 100,
                 y: this.height * 0.5 - 50,
-                radius: 60,
+                radius: 80,
                 color: [1, 0, 1], // Magenta
                 angle: Math.PI * 2 / 3,
                 orbitRadius: 200,
@@ -103,7 +109,7 @@ class OptimizedMetaballs {
             {
                 x: this.width * 0.5 - 80,
                 y: this.height * 0.5 + 80,
-                radius: 70,
+                radius: 80,
                 color: [1, 1, 0], // Yellow
                 angle: Math.PI * 4 / 3,
                 orbitRadius: 120,
