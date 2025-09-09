@@ -53,7 +53,7 @@ void main() {
                     (halo * 0.3 * brightness);
 
         // ✅ Color stays normalized, only alpha drives strength
-        gl_FragColor = vec4(mixedColor, min(0.95, alpha));
+        gl_FragColor = vec4(mixedColor, min(0.99, alpha));
 
     } else {
         gl_FragColor = vec4(0.0);
