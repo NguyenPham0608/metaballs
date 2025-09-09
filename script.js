@@ -42,11 +42,11 @@ void main() {
         // Normalize colors like Canvas2D
         color /= totalField;
 
-        // Soft edge transition
-        float edge = smoothstep(0.0, u_threshold * 0.006, totalField);
+        float edge = smoothstep(u_threshold * 0.002, u_threshold * 0.004, totalField);
 
-        // Intensity and glow factor
-        float intensity = edge * min(1.5, sqrt(totalField) * u_glow * 0.015);
+
+        float intensity = edge * sqrt(totalField) * u_glow * 0.010;
+
 
         gl_FragColor = vec4(color * intensity, min(0.95, intensity));
     } else {
