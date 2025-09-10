@@ -308,6 +308,11 @@ class OptimizedMetaballs {
         document.getElementById('toggleMode').addEventListener('click', () => {
             this.switchMode();
         });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 's') {
+                this.takeScreenshot();
+            }
+        });
 
         // Resize
         window.addEventListener('resize', this.resize.bind(this));
@@ -413,6 +418,95 @@ class OptimizedMetaballs {
             this.data32 = new Uint32Array(this.imageData.data.buffer);
         }
     }
+    takeScreenshot() {
+        if (this.useWebGL && this.gl) {
+            // WebGL screenshot
+            const gl = this.gl;
+            const canvas = this.canvasWebGL;
+
+            // Re-render one frame with transparent background
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            // Render the metaballs
+            this.renderWebGL();
+
+            // Capture and download
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `metaballs_${Date.now()}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        } else {
+            // Canvas2D screenshot (original code)
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = this.canvas2d.width;
+            tempCanvas.height = this.canvas2d.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Render only metaballs with no background
+            const width = tempCanvas.width;
+            const height = tempCanvas.height;
+            const step = Math.max(1, this.config.resolution);
+            const threshold = this.config.threshold * 0.003;
+            const glowFactor = this.config.glow * 0.015;
+
+            const balls = this.metaballs.map(ball => ({
+                x: ball.x * this.quality,
+                y: ball.y * this.quality,
+                radius: ball.radius * this.quality,
+                r: ball.color[0],
+                g: ball.color[1],
+                b: ball.color[2]
+            }));
+
+            for (let y = 0; y < height; y += step) {
+                for (let x = 0; x < width; x += step) {
+                    let totalField = 0;
+                    let r = 0, g = 0, b = 0;
+
+                    for (let i = 0; i < balls.length; i++) {
+                        const dx = x - balls[i].x;
+                        const dy = y - balls[i].y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        const normalizedDist = dist / (balls[i].radius * 3);
+                        const field = Math.max(0, 1 - normalizedDist) ** 2;
+
+                        r += balls[i].r * field;
+                        g += balls[i].g * field;
+                        b += balls[i].b * field;
+                        totalField += field;
+                    }
+
+                    if (totalField > threshold) {
+                        r /= totalField;
+                        g /= totalField;
+                        b /= totalField;
+
+                        const edge = this.smoothstep(0, threshold * 2, totalField);
+                        const intensity = edge * Math.min(1.5, Math.sqrt(totalField) * glowFactor);
+
+                        tempCtx.fillStyle = `rgba(${(r * 255 * intensity) | 0}, ${(g * 255 * intensity) | 0}, ${(b * 255 * intensity) | 0}, ${Math.min(0.95, intensity)})`;
+                        tempCtx.fillRect(x, y, step, step);
+                    }
+                }
+            }
+
+            // Download the image
+            tempCanvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `metaballs_${Date.now()}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+    }
+
 
     updateMetaballs(deltaTime) {
         const speedFactor = this.config.speed * 0.02;
