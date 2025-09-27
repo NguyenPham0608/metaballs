@@ -6,20 +6,20 @@ void main() {
 }
 `;
 
-// FIXED WebGL fragment shader for proper color blending
 const fragmentShaderSource = `
 precision highp float;
 
 uniform vec2 u_resolution;
 uniform float u_time;
-uniform vec3 u_balls[3];
-uniform vec3 u_colors[3];
-uniform float u_radii[3];
+uniform vec3 u_balls[10];
+uniform vec3 u_colors[10];
+uniform float u_radii[10];
+uniform int u_ballCount;
 uniform float u_threshold;
 uniform float u_glow;
 
 float fieldFalloff(float dist, float radius) {
-    float normalizedDist = dist / (radius * 3.0); // matches Canvas2D “3x radius” soft falloff
+    float normalizedDist = dist / (radius * 3.0);
     return pow(max(0.0, 1.0 - normalizedDist), 2.0);
 }
 
@@ -28,33 +28,28 @@ void main() {
     float totalField = 0.0;
     vec3 weightedColor = vec3(0.0);
 
-    // Accumulate weighted colors
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 10; i++) {
+        if (i >= u_ballCount) break;
+        
         vec2 ballPos = u_balls[i].xy;
         float radius = u_radii[i];
         float dist = distance(uv, ballPos);
-
         float field = fieldFalloff(dist, radius);
+        
         totalField += field;
         weightedColor += u_colors[i] * field;
     }
 
     if (totalField > u_threshold * 0.003) {
-        vec3 mixedColor = weightedColor / totalField; // hue preserved
-
-        // Core & halo masks
+        vec3 mixedColor = weightedColor / totalField;
+        
         float core = smoothstep(u_threshold * 0.003, u_threshold * 0.005, totalField);
         float halo = smoothstep(u_threshold * 0.0005, u_threshold * 0.04, totalField);
-
-        // Brightness only affects alpha, not RGB directly
+        
         float brightness = pow(totalField, 0.4);
-
-        float alpha = (core * u_glow * 0.03 * brightness) +
-                    (halo * 0.3 * brightness);
-
-        // ✅ Color stays normalized, only alpha drives strength
+        float alpha = (core * u_glow * 0.03 * brightness) + (halo * 0.3 * brightness);
+        
         gl_FragColor = vec4(mixedColor, min(0.99, alpha));
-
     } else {
         gl_FragColor = vec4(0.0);
     }
@@ -141,6 +136,28 @@ class OptimizedMetaballs {
 
         // Animation control
         this.animationId = null;
+        // Add these properties after existing config
+        this.maxBalls = 10;
+        this.effects = {
+            colorCycling: false,
+            gravity: false,
+            collision: false,
+            mouseAttraction: false,
+            mouseRepulsion: false,
+            pulsing: false,
+            chromatic: false,
+            rainbow: false,
+            clickSpawn: false
+        };
+
+        // Modify existing metaballs to add physics properties
+        this.metaballs = this.metaballs.map(ball => ({
+            ...ball,
+            vx: 0,
+            vy: 0,
+            mass: ball.radius,
+            hue: ball === this.metaballs[0] ? 180 : ball === this.metaballs[1] ? 300 : 60
+        }));
         this.init();
         this.switchMode();
     }
@@ -199,12 +216,15 @@ class OptimizedMetaballs {
         gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
         // Get uniform locations
+        // Replace the entire this.uniforms = {...} with:
+        // Add ballCount uniform to the existing uniforms
         this.uniforms = {
             resolution: gl.getUniformLocation(this.program, 'u_resolution'),
             time: gl.getUniformLocation(this.program, 'u_time'),
             balls: gl.getUniformLocation(this.program, 'u_balls'),
             colors: gl.getUniformLocation(this.program, 'u_colors'),
             radii: gl.getUniformLocation(this.program, 'u_radii'),
+            ballCount: gl.getUniformLocation(this.program, 'u_ballCount'), // Add this line
             threshold: gl.getUniformLocation(this.program, 'u_threshold'),
             glow: gl.getUniformLocation(this.program, 'u_glow')
         };
@@ -237,6 +257,120 @@ class OptimizedMetaballs {
         }
 
         return shader;
+    }
+
+    // Add HSL to RGB converter
+    hslToRgb(h, s, l) {
+        let r, g, b;
+        if (s === 0) {
+            r = g = b = l;
+        } else {
+            const hue2rgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1 / 6) return p + (q - p) * 6 * t;
+                if (t < 1 / 2) return q;
+                if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+                return p;
+            };
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+            r = hue2rgb(p, q, h + 1 / 3);
+            g = hue2rgb(p, q, h);
+            b = hue2rgb(p, q, h - 1 / 3);
+        }
+        return [r, g, b];
+    }
+
+    // Gravity physics
+    applyGravity() {
+        const G = 0.3;
+        for (let i = 0; i < this.metaballs.length; i++) {
+            for (let j = i + 1; j < this.metaballs.length; j++) {
+                const ball1 = this.metaballs[i];
+                const ball2 = this.metaballs[j];
+
+                const dx = ball2.x - ball1.x;
+                const dy = ball2.y - ball1.y;
+                const distSq = dx * dx + dy * dy;
+                const dist = Math.sqrt(distSq);
+
+                if (dist > 10 && dist < 500) {
+                    const force = G * (ball1.mass * ball2.mass) / distSq;
+                    const fx = force * dx / dist;
+                    const fy = force * dy / dist;
+
+                    ball1.vx += fx / ball1.mass;
+                    ball1.vy += fy / ball1.mass;
+                    ball2.vx -= fx / ball2.mass;
+                    ball2.vy -= fy / ball2.mass;
+                }
+            }
+        }
+    }
+
+    // Collision detection
+    handleCollisions() {
+        for (let i = 0; i < this.metaballs.length; i++) {
+            for (let j = i + 1; j < this.metaballs.length; j++) {
+                const ball1 = this.metaballs[i];
+                const ball2 = this.metaballs[j];
+
+                const dx = ball2.x - ball1.x;
+                const dy = ball2.y - ball1.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const minDist = (ball1.radius + ball2.radius) * 0.8;
+
+                if (dist < minDist && dist > 0) {
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+
+                    const dvx = ball2.vx - ball1.vx;
+                    const dvy = ball2.vy - ball1.vy;
+                    const dot = dvx * nx + dvy * ny;
+
+                    if (dot > 0) continue;
+
+                    const mass1 = ball1.mass;
+                    const mass2 = ball2.mass;
+                    const impulse = 2 * dot / (mass1 + mass2);
+
+                    ball1.vx += impulse * mass2 * nx;
+                    ball1.vy += impulse * mass2 * ny;
+                    ball2.vx -= impulse * mass1 * nx;
+                    ball2.vy -= impulse * mass1 * ny;
+
+                    const overlap = minDist - dist;
+                    const separationX = nx * overlap * 0.5;
+                    const separationY = ny * overlap * 0.5;
+                    ball1.x -= separationX;
+                    ball1.y -= separationY;
+                    ball2.x += separationX;
+                    ball2.y += separationY;
+                }
+            }
+        }
+    }
+
+    // Mouse forces
+    applyMouseForce() {
+        const force = this.config.mouseForce * 0.01;
+        const direction = this.effects.mouseRepulsion ? -1 : 1;
+
+        this.metaballs.forEach(ball => {
+            if (!ball.isDragging) {
+                const dx = this.mouse.x - ball.x;
+                const dy = this.mouse.y - ball.y;
+                const distSq = dx * dx + dy * dy;
+                const dist = Math.sqrt(distSq);
+
+                if (dist > 1 && dist < 400) {
+                    const f = force * direction / dist;
+                    ball.vx += dx * f;
+                    ball.vy += dy * f;
+                }
+            }
+        });
     }
 
     switchMode() {
@@ -311,6 +445,123 @@ class OptimizedMetaballs {
         document.addEventListener('keydown', (e) => {
             if (e.key === 's') {
                 this.takeScreenshot();
+            }
+        });
+
+        // Add these at the end of setupEventListeners method:
+
+        // Add mouse force control
+        document.getElementById('mouseForce').addEventListener('input', (e) => {
+            this.config.mouseForce = parseInt(e.target.value);
+            document.getElementById('mouseForceValue').textContent = e.target.value;
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case '1':
+                    this.effects.colorCycling = !this.effects.colorCycling;
+                    document.getElementById('colorCycleBtn')?.classList.toggle('active');
+                    break;
+                case '2':
+                    this.effects.gravity = !this.effects.gravity;
+                    document.getElementById('gravityBtn')?.classList.toggle('active');
+                    break;
+                case '3':
+                    this.effects.collision = !this.effects.collision;
+                    document.getElementById('collisionBtn')?.classList.toggle('active');
+                    break;
+                case '4':
+                    this.effects.mouseAttraction = !this.effects.mouseAttraction;
+                    this.effects.mouseRepulsion = false;
+                    document.getElementById('mouseAttractBtn')?.classList.toggle('active');
+                    if (this.effects.mouseAttraction) {
+                        document.getElementById('mouseRepelBtn')?.classList.remove('active');
+                    }
+                    break;
+                case '5':
+                    this.effects.mouseRepulsion = !this.effects.mouseRepulsion;
+                    this.effects.mouseAttraction = false;
+                    document.getElementById('mouseRepelBtn')?.classList.toggle('active');
+                    if (this.effects.mouseRepulsion) {
+                        document.getElementById('mouseAttractBtn')?.classList.remove('active');
+                    }
+                    break;
+                case '6':
+                    this.effects.pulsing = !this.effects.pulsing;
+                    document.getElementById('pulsingBtn')?.classList.toggle('active');
+                    break;
+                case '7':
+                    this.effects.chromatic = !this.effects.chromatic;
+                    document.getElementById('chromaticBtn')?.classList.toggle('active');
+                    break;
+                case '8':
+                    this.effects.rainbow = !this.effects.rainbow;
+                    document.getElementById('rainbowBtn')?.classList.toggle('active');
+                    break;
+                case 'c':
+                case 'C':
+                    this.effects.clickSpawn = !this.effects.clickSpawn;
+                    document.getElementById('clickSpawnBtn')?.classList.toggle('active');
+                    break;
+                case 's':
+                    this.takeScreenshot();
+                    break;
+            }
+        });
+
+        // Click to spawn
+        this.canvasWebGL.addEventListener('click', (e) => {
+            if (this.effects.clickSpawn && !this.mouse.isDragging && this.metaballs.length < 10) {
+                const newBall = {
+                    x: e.clientX,
+                    y: e.clientY,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    radius: 40 + Math.random() * 60,
+                    mass: 80,
+                    color: this.hslToRgb(Math.random(), 1, 0.5),
+                    hue: Math.random() * 360,
+                    angle: 0,
+                    orbitRadius: 100,
+                    orbitSpeed: 0.01 + Math.random() * 0.02,
+                    isDragging: false
+                };
+                this.metaballs.push(newBall);
+
+                // Update FPS counter
+                document.getElementById('fpsCounter').textContent = `FPS: ${this.fps} | Balls: ${this.metaballs.length}`;
+            }
+        });
+
+        // Effect buttons
+        const effectButtons = [
+            { id: 'colorCycleBtn', effect: 'colorCycling' },
+            { id: 'gravityBtn', effect: 'gravity' },
+            { id: 'collisionBtn', effect: 'collision' },
+            { id: 'mouseAttractBtn', effect: 'mouseAttraction' },
+            { id: 'mouseRepelBtn', effect: 'mouseRepulsion' },
+            { id: 'pulsingBtn', effect: 'pulsing' },
+            { id: 'chromaticBtn', effect: 'chromatic' },
+            { id: 'rainbowBtn', effect: 'rainbow' },
+            { id: 'clickSpawnBtn', effect: 'clickSpawn' }
+        ];
+
+        effectButtons.forEach(btn => {
+            const element = document.getElementById(btn.id);
+            if (element) {
+                element.addEventListener('click', () => {
+                    if (btn.effect === 'mouseAttraction' && !this.effects.mouseAttraction) {
+                        this.effects.mouseRepulsion = false;
+                        document.getElementById('mouseRepelBtn')?.classList.remove('active');
+                    } else if (btn.effect === 'mouseRepulsion' && !this.effects.mouseRepulsion) {
+                        this.effects.mouseAttraction = false;
+                        document.getElementById('mouseAttractBtn')?.classList.remove('active');
+                    }
+
+                    this.effects[btn.effect] = !this.effects[btn.effect];
+                    element.classList.toggle('active');
+                });
             }
         });
 
@@ -510,29 +761,45 @@ class OptimizedMetaballs {
 
     updateMetaballs(deltaTime) {
         const speedFactor = this.config.speed * 0.02;
-        const dt = Math.min(deltaTime * 0.001, 0.1); // Cap delta time
+        const dt = Math.min(deltaTime * 0.001, 0.1);
+
+        // Apply physics
+        if (this.effects.gravity) this.applyGravity();
+        if (this.effects.collision) this.handleCollisions();
+        if (this.effects.mouseAttraction || this.effects.mouseRepulsion) {
+            this.applyMouseForce();
+        }
 
         for (let i = 0; i < this.metaballs.length; i++) {
             const ball = this.metaballs[i];
 
             if (!ball.isDragging) {
-                ball.angle += ball.orbitSpeed * speedFactor;
+                if (this.effects.gravity || this.effects.mouseAttraction || this.effects.mouseRepulsion) {
+                    ball.x += ball.vx * dt * 60;
+                    ball.y += ball.vy * dt * 60;
+                    ball.vx *= 0.99;
+                    ball.vy *= 0.99;
 
-                // Use precalculated trig functions when possible
-                const cos = Math.cos(ball.angle);
-                const sin = Math.sin(ball.angle);
+                    if (ball.x < ball.radius || ball.x > this.width - ball.radius) {
+                        ball.vx *= -0.7;
+                        ball.x = Math.max(ball.radius, Math.min(this.width - ball.radius, ball.x));
+                    }
+                    if (ball.y < ball.radius || ball.y > this.height - ball.radius) {
+                        ball.vy *= -0.7;
+                        ball.y = Math.max(ball.radius, Math.min(this.height - ball.radius, ball.y));
+                    }
+                } else {
+                    ball.angle += ball.orbitSpeed * speedFactor;
+                    const targetX = this.centerX + Math.cos(ball.angle) * ball.orbitRadius;
+                    const targetY = this.centerY + Math.sin(ball.angle) * ball.orbitRadius;
 
-                const targetX = this.centerX + cos * ball.orbitRadius;
-                const targetY = this.centerY + sin * ball.orbitRadius;
+                    const smoothing = 1 - Math.exp(-5 * dt);
+                    ball.x += (targetX - ball.x) * smoothing;
+                    ball.y += (targetY - ball.y) * smoothing;
 
-                // Smooth movement with delta time
-                const smoothing = 1 - Math.exp(-5 * dt);
-                ball.x += (targetX - ball.x) * smoothing;
-                ball.y += (targetY - ball.y) * smoothing;
-
-                // Simplified floating motion
-                ball.x += Math.sin(ball.angle * 2) * 2;
-                ball.y += Math.cos(ball.angle * 1.5) * 2;
+                    ball.x += Math.sin(ball.angle * 2) * 2;
+                    ball.y += Math.cos(ball.angle * 1.5) * 2;
+                }
             }
         }
     }
@@ -551,28 +818,33 @@ class OptimizedMetaballs {
         gl.uniform1f(this.uniforms.time, performance.now() * 0.001);
         gl.uniform1f(this.uniforms.threshold, this.config.threshold);
         gl.uniform1f(this.uniforms.glow, this.config.glow);
+        gl.uniform1i(this.uniforms.ballCount, this.metaballs.length); // Add this line
 
-        // Update metaball positions and properties
+        // Update metaball positions and properties (support up to 10)
         const positions = [];
         const colors = [];
         const radii = [];
 
-        for (let i = 0; i < this.metaballs.length; i++) {
+        for (let i = 0; i < Math.min(this.metaballs.length, this.maxBalls); i++) {
             const ball = this.metaballs[i];
             positions.push(ball.x * this.quality, (this.height - ball.y) * this.quality, 0);
             colors.push(...ball.color);
             radii.push(ball.radius * this.quality);
         }
 
+        // Pad arrays for unused slots
+        for (let i = this.metaballs.length; i < this.maxBalls; i++) {
+            positions.push(0, 0, 0);
+            colors.push(0, 0, 0);
+            radii.push(0);
+        }
+
         gl.uniform3fv(this.uniforms.balls, positions);
         gl.uniform3fv(this.uniforms.colors, colors);
         gl.uniform1fv(this.uniforms.radii, radii);
 
-        // Draw
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
-
-    // FIXED Canvas2D rendering with proper color blending
     renderCanvas2D() {
         const ctx = this.ctx;
         if (!ctx) return;
@@ -655,7 +927,7 @@ class OptimizedMetaballs {
             this.fps = this.frameCount;
             this.frameCount = 0;
             this.lastTime = currentTime;
-            document.getElementById('fpsCounter').textContent = `FPS: ${this.fps}`;
+            document.getElementById('fpsCounter').textContent = `FPS: ${this.fps} | Balls: ${this.metaballs.length}`;
         }
     }
 

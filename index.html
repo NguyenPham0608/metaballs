@@ -44,6 +44,19 @@
             <input type="range" id="quality" min="0.25" max="2" step="0.25" value="1">
             <span class="value" id="qualityValue">1.0</span>
         </div>
+
+        <!-- Add after the existing control-groups -->
+        <div class="control-group">
+            <label>Mouse Force</label>
+            <input type="range" id="mouseForce" min="0" max="100" value="50">
+            <span class="value" id="mouseForceValue">50</span>
+        </div>
+
+        <div class="control-group">
+            <label style="color: #00ffff; margin: 10px 0 5px 0; display: block;">Effects</label>
+            <button class="toggle-btn effect-btn" id="clickSpawnBtn">✨ Click Spawn</button>
+        </div>
+
         <button class="toggle-btn" id="toggleMode">Switch to WebGL</button>
     </div>
 
