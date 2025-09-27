@@ -137,7 +137,7 @@ class OptimizedMetaballs {
         // Animation control
         this.animationId = null;
         // Add these properties after existing config
-        this.maxBalls = 10;
+        this.maxBalls = 20;
         this.effects = {
             colorCycling: false,
             gravity: false,
@@ -518,7 +518,7 @@ class OptimizedMetaballs {
                     y: e.clientY,
                     vx: (Math.random() - 0.5) * 10,
                     vy: (Math.random() - 0.5) * 10,
-                    radius: 40 + Math.random() * 60,
+                    radius: 80,
                     mass: 80,
                     color: this.hslToRgb(Math.random(), 1, 0.5),
                     hue: Math.random() * 360,
