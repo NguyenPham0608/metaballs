@@ -140,6 +140,7 @@
             ior: 1.5,
             clearcoat: 1,
             clearcoatRoughness: 0,
+
         });
         const metalMaterial = new THREE.MeshPhysicalMaterial({
             metalness: 1,
@@ -151,12 +152,15 @@
             ior: 1.5,
             clearcoat: 1,
             clearcoatRoughness: 0,
+            vertexColors: true,
         });
 
         const matteMaterial = new THREE.MeshPhysicalMaterial({
             metalness: 0,
             roughness: 1,
-            transmission: 0
+            transmission: 0,
+            wireframe: true,
+            linewidth: 0.5
         });
         let mode = 1;
         const materials = [matteMaterial, metalMaterial, glassMaterial];
@@ -175,7 +179,7 @@
         effect.position.set(0, 0, 0);
         effect.scale.set(15, 15, 15);
         effect.enableUvs = false;
-        effect.enableColors = false;
+        effect.enableColors = (mode === 1); // Enable colors for metal material
         effect.isolation = 50;
 
         scene.add(effect);
@@ -196,6 +200,14 @@
         const numBlobs = 4;
         const metaballs = [];
 
+        // Define vibrant colors for each metaball
+        const ballColors = [
+            new THREE.Color(0xff0080), // Hot pink
+            new THREE.Color(0x00ffff), // Cyan
+            new THREE.Color(0xffff00), // Yellow
+            new THREE.Color(0x00ff80), // Spring green
+        ];
+
         // Initialize metaballs in circular pattern
         for (let i = 0; i < numBlobs; i++) {
             const angle = (i / numBlobs) * Math.PI * 2;
@@ -208,7 +220,8 @@
                 vy: 0,
                 vz: 0,
                 strength: 1,
-                subtract: 12
+                subtract: 12,
+                color: ballColors[i]
             });
         }
 
@@ -364,7 +377,7 @@
             effect.position.set(0, 0, 0);
             effect.scale.set(15, 15, 15);
             effect.enableUvs = false;
-            effect.enableColors = false;
+            effect.enableColors = (mode === 1); // Enable colors only for metal material
             effect.isolation = 50;
             scene.add(effect);
         }
@@ -403,7 +416,12 @@
                     ball.z = Math.max(0.02, Math.min(0.98, ball.z));
                 }
 
-                effect.addBall(ball.x, ball.y, ball.z, ball.strength, ball.subtract);
+                // Add ball with color if in metal mode
+                if (mode === 1) {
+                    effect.addBall(ball.x, ball.y, ball.z, ball.strength, ball.subtract, ball.color);
+                } else {
+                    effect.addBall(ball.x, ball.y, ball.z, ball.strength, ball.subtract);
+                }
             });
 
             effect.update();
