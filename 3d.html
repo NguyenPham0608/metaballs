@@ -127,6 +127,7 @@
         ]);
 
         scene.background = envMap;
+        scene.environment = envMap;
 
         // Create marching cubes for metaballs
         const resolution = 80;
@@ -136,11 +137,11 @@
             transmission: 1,
             thickness: 0.5,
             envMap: envMap,
-            envMapIntensity: 1.5,
+            envMapIntensity: 2.0,
             ior: 1.5,
             clearcoat: 1,
             clearcoatRoughness: 0,
-
+            vertexColors: true,
         });
         const metalMaterial = new THREE.MeshPhysicalMaterial({
             metalness: 1,
@@ -148,19 +149,18 @@
             transmission: 0,
             thickness: 0.5,
             envMap: envMap,
-            envMapIntensity: 1.5,
+            envMapIntensity: 2.0,
             ior: 1.5,
             clearcoat: 1,
             clearcoatRoughness: 0,
             vertexColors: true,
         });
 
-        const matteMaterial = new THREE.MeshPhysicalMaterial({
-            metalness: 0,
-            roughness: 1,
-            transmission: 0,
+        const matteMaterial = new THREE.MeshBasicMaterial({
             wireframe: true,
-            linewidth: 0.5
+            vertexColors: true,
+            wireframeLinewidth: 2,
+            side: THREE.DoubleSide,
         });
         let mode = 1;
         const materials = [matteMaterial, metalMaterial, glassMaterial];
@@ -179,7 +179,7 @@
         effect.position.set(0, 0, 0);
         effect.scale.set(15, 15, 15);
         effect.enableUvs = false;
-        effect.enableColors = (mode === 1); // Enable colors for metal material
+        effect.enableColors = (mode === 0 || mode === 1 || mode === 2); // Enable colors for metal material
         effect.isolation = 50;
 
         scene.add(effect);
@@ -377,7 +377,7 @@
             effect.position.set(0, 0, 0);
             effect.scale.set(15, 15, 15);
             effect.enableUvs = false;
-            effect.enableColors = (mode === 1); // Enable colors only for metal material
+            effect.enableColors = (mode === 1 || mode === 0 || mode === 2); // Enable colors only for metal material
             effect.isolation = 50;
             scene.add(effect);
         }
@@ -417,7 +417,7 @@
                 }
 
                 // Add ball with color if in metal mode
-                if (mode === 1) {
+                if (mode === 1 || mode === 0 || mode === 2) {
                     effect.addBall(ball.x, ball.y, ball.z, ball.strength, ball.subtract, ball.color);
                 } else {
                     effect.addBall(ball.x, ball.y, ball.z, ball.strength, ball.subtract);
